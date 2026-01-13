@@ -1,0 +1,38 @@
+
+
+-- 1. IDENTIFY ORPHANED KYB RECORDS
+-- Beneficial owners that don't exist in the main User table
+SELECT 
+    bo.owner_id AS entity_id,
+    'Corporate_Registry.beneficial_owners' AS source_table,
+    'Orphaned Record' AS issue_type,
+    'Owner ID does not exist in Platform_Core' AS description
+FROM Corporate_Registry.beneficial_owners bo
+LEFT JOIN Platform_Core.user_accounts u ON bo.owner_id = u.user_id
+WHERE u.user_id IS NULL
+
+UNION ALL
+
+-- 2. IDENTIFY PII MISMATCHES
+-- Users whose names differ between the App and the Identity Vault
+SELECT 
+    u.user_id,
+    'Identity_Vault.person_identity' AS source_table,
+    'Data Inconsistency' AS issue_type,
+    CONCAT('Platform Name: ', u.full_name, ' vs KYC Name: ', k.full_name) AS description
+FROM Platform_Core.user_accounts u
+INNER JOIN Identity_Vault.person_identity k ON u.user_id = k.user_id
+WHERE u.full_name <> k.full_name
+
+UNION ALL
+
+-- 3. IDENTIFY STATUS LOGIC ERRORS
+-- Users marked "Verified" in the app but "Failed" or "Pending" in KYC
+SELECT 
+    u.user_id,
+    'Platform_Core.user_accounts' AS source_table,
+    'Logic Conflict' AS issue_type,
+    'User is active on platform but KYC status is not Passed' AS description
+FROM Platform_Core.user_accounts u
+JOIN Identity_Vault.verification_status v ON u.user_id = v.user_id
+WHERE u.account_status = 'Active' AND v.verification_status <> 'Passed';
