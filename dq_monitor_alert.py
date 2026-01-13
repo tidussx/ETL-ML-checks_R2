@@ -1,35 +1,37 @@
+import os
 import pandas as pd
-import sqlite3 # Using sqlite3 for this example; swap for sqlalchemy for Postgres/Snowflake
+from sqlalchemy import create_engine
+import requests
 
 def run_dq_audit():
-    # conn = sqlalchemy.create_engine('postgresql://user:pass@host/db')
-    conn = sqlite3.connect('data_governance.db') 
-    
-    print(" Starting DQ Syncing Check...")
+    # Fetch connection string from GitHub Secrets environment
+    db_url = os.getenv('DB_CONNECTION_STRING')
+    if not db_url:
+        raise ValueError("No DB_CONNECTION_STRING found in environment variables")
 
-    # Load the SQL query from the file above or a string
+    engine = create_engine(db_url)
+    
+    # Use the SQL query we wrote earlier
     query = """
-    SELECT u.user_id, u.full_name, k.verification_status 
-    FROM user_accounts u
-    LEFT JOIN verification_status k ON u.user_id = k.user_id
-    WHERE k.verification_status IS NULL
+    SELECT u.user_id, 'Inconsistency' as issue_type
+    FROM Platform_Core.user_accounts u
+    LEFT JOIN Identity_Vault.verification_status k ON u.user_id = k.user_id
+    WHERE k.verification_status IS NULL;
     """
     
-    df_issues = pd.read_sql_query(query, conn)
+    try:
+        df_issues = pd.read_sql_query(query, engine)
+        if not df_issues.empty:
+            send_slack_alert(df_issues)
+    except Exception as e:
+        print(f"Error connecting to database: {e}")
 
-    if not df_issues.empty:
-        print(f"⚠️ Found {len(df_issues)} synchronization issues!")
-        send_alert(df_issues)
-    else:
-        print("✅ All databases are synchronized.")
-
-def send_alert(data):
-    """
-    Placeholder for alerting logic (Slack, Email, GitHub Issue)
-    """
-    print("--- DQ VIOLATION REPORT ---")
-    print(data.to_string())
-    # Example: requests.post(slack_webhook_url, json={"text": "DQ Alert..."})
+def send_slack_alert(data):
+    webhook_url = os.getenv('SLACK_WEBHOOK_URL')
+    message = {
+        "text": f"🚨 *Data Governance Alert*: Found {len(data)} synchronization mismatches across KYC/KYB databases."
+    }
+    requests.post(webhook_url, json=message)
 
 if __name__ == "__main__":
     run_dq_audit()
