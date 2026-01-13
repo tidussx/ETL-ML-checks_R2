@@ -29,7 +29,7 @@ def run_dq_audit():
 def send_slack_alert(data):
     webhook_url = os.getenv('SLACK_WEBHOOK_URL')
     message = {
-        "text": f"🚨 *Data Governance Alert*: Found {len(data)} synchronization mismatches across KYC/KYB databases."
+        "text": f"RING_RING *Data Governance Alert*: Found {len(data)} synchronization mismatches across KYC/KYB databases."
     }
     requests.post(webhook_url, json=message)
 
